@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Home Finance",
+    "slug": "home-finance",
+    "version": "1.0.0",
+    "scheme": "home-finance",
+    "userInterfaceStyle": "dark",
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "ios": {
+      "bundleIdentifier": "com.davi.homefinance"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-document-picker",
+      "expo-font"
+    ],
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#131315"
+      },
+      "package": "com.davi.homefinance"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b1b74176-da59-4bac-949a-6a165324c9bd"
+      }
+    }
+  }
+}
