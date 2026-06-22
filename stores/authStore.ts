@@ -1,85 +1,66 @@
 import { create } from "zustand";
 import { supabase } from "@/lib/supabase";
+import { familyService } from "@/services/supabase/familyService";
+import { devError } from "@/lib/errorHandler";
 import type { User } from "@supabase/supabase-js";
-
-interface FamilyMember {
-  id: string;
-  name: string;
-  family_id: string;
-  role: "admin" | "member";
-  color: string;
-}
-
-interface Family {
-  id: string;
-  name: string;
-  created_by: string;
-}
+import type { FamilyMember, Family, AuthStatus } from "@/types";
 
 interface AuthState {
   user: User | null;
   member: FamilyMember | null;
   family: Family | null;
-  loading: boolean;
+  status: AuthStatus;
+
+  // Actions
   setUser: (user: User | null) => void;
   setMember: (member: FamilyMember | null) => void;
-  setLoading: (loading: boolean) => void;
-  signOut: () => Promise<void>;
+  setStatus: (status: AuthStatus) => void;
   fetchMember: () => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   member: null,
   family: null,
-  loading: true,
+  status: "loading",
 
   setUser: (user) => set({ user }),
   setMember: (member) => set({ member }),
-  setLoading: (loading) => set({ loading }),
+  setStatus: (status) => set({ status }),
 
   fetchMember: async () => {
     const { user } = get();
     if (!user) {
-      set({ member: null, family: null, loading: false });
+      set({ member: null, family: null, status: "unauthenticated" });
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from("family_members")
-        .select("*, families(*)")
-        .eq("user_id", user.id)
-        .single();
+      const result = await familyService.getMemberByUserId(user.id);
 
-      if (error) {
-        console.log("No family member found:", error.message);
-        set({ member: null, family: null, loading: false });
-        return;
-      }
-
-      if (data) {
-        const family = data.families as unknown as Family;
+      if (result) {
         set({
-          member: {
-            id: data.id,
-            name: data.name,
-            family_id: data.family_id,
-            role: data.role,
-            color: data.color,
-          },
-          family: family ?? null,
-          loading: false,
+          member: result.member,
+          family: result.family,
+          status: "authenticated",
         });
+      } else {
+        set({ member: null, family: null, status: "no-family" });
       }
     } catch (err) {
-      console.error("Error fetching member:", err);
-      set({ member: null, family: null, loading: false });
+      devError("Error fetching member:", err);
+      set({ member: null, family: null, status: "no-family" });
     }
   },
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ user: null, member: null, family: null, loading: false });
+    set({
+      user: null,
+      member: null,
+      family: null,
+      status: "unauthenticated",
+    });
   },
 }));

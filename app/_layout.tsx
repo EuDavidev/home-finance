@@ -26,7 +26,7 @@ if (Platform.OS === "web" && typeof window !== "undefined") {
 }
 
 export default function RootLayout() {
-  const { user, member, setUser, fetchMember, setLoading } = useAuthStore();
+  const { user, member, setUser, fetchMember, setStatus } = useAuthStore();
   const router = useRouter();
   const navigationState = useRootNavigationState();
   const [authReady, setAuthReady] = useState(false);
@@ -47,7 +47,7 @@ export default function RootLayout() {
 
     (async () => {
       try {
-        setLoading(true);
+        setStatus("loading");
 
         // Race getSession against a 5s timeout (web GoTrue lock workaround)
         let session = null;
@@ -68,11 +68,12 @@ export default function RootLayout() {
           await fetchMember();
         } else {
           setUser(null);
+          setStatus("unauthenticated");
         }
       } catch {
         setUser(null);
+        setStatus("unauthenticated");
       } finally {
-        setLoading(false);
         setAuthReady(true);
       }
     })();

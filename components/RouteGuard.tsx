@@ -15,7 +15,8 @@ export function RouteGuard({
   requireMember = false,
 }: RouteGuardProps) {
   const router = useRouter();
-  const { user, member, loading } = useAuthStore();
+  const { user, member, status } = useAuthStore();
+  const loading = status === "loading";
 
   useEffect(() => {
     if (loading) return;

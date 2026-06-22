@@ -1,6 +1,5 @@
 import {
   View,
-  Text,
   TextInput,
   Pressable,
   ScrollView,
@@ -10,14 +9,16 @@ import {
   Modal,
   Dimensions,
 } from "react-native";
-import { useState, useRef, useEffect } from "react";
-import { X, Mic, MicOff, Zap } from "lucide-react-native";
+import { useState, useEffect } from "react";
+import { X, Mic, Zap } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import * as Speech from "expo-speech";
-import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/authStore";
 import { useRecentCategories } from "@/hooks/useRecentCategories";
 import { DEFAULT_CATEGORIES } from "@/constants/categories";
+import { transactionService } from "@/services/supabase/transactionService";
+import { Text } from "@/components/ui/Text";
+import type { CreateTransactionDTO } from "@/types";
 
 const { height } = Dimensions.get("window");
 
@@ -27,19 +28,12 @@ interface QuickTransactionModalProps {
   onSuccess?: () => void;
 }
 
-/**
- * Modal para lançamento rápido de transações
- * - Campos mínimos: tipo, valor, descrição
- * - Categorias recentes como sugestão
- * - Voice input opcional
- * - Swipe para confirmar
- */
 export function QuickTransactionModal({
   visible,
   onClose,
   onSuccess,
 }: QuickTransactionModalProps) {
-  const { member, family } = useAuthStore();
+  const { member } = useAuthStore();
   const { categories: recentCategories } = useRecentCategories();
 
   const [type, setType] = useState<"expense" | "income">("expense");
@@ -50,7 +44,6 @@ export function QuickTransactionModal({
   const [voiceLoading, setVoiceLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Reset ao fechar
   useEffect(() => {
     if (!visible) {
       setAmount("");
@@ -64,19 +57,13 @@ export function QuickTransactionModal({
     try {
       setVoiceLoading(true);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      // Simula captura de voz
-      // Em produção, integrar com expo-speech ou react-native-voice
-      // Por enquanto, apenas placeholder
       Speech.speak("Recurso de voz em desenvolvimento", {
         language: "pt-BR",
         pitch: 1,
         rate: 1,
       });
-
       setVoiceLoading(false);
-    } catch (err) {
-      console.error("Erro no voice input:", err);
+    } catch {
       setVoiceLoading(false);
     }
   };
@@ -98,28 +85,20 @@ export function QuickTransactionModal({
         return;
       }
 
-      const { error: insertError } = await supabase
-        .from("transactions")
-        .insert({
-          family_id: member.family_id,
-          member_id: member.id,
-          member_name: member.name,
-          type,
-          amount: amountNumber,
-          description,
-          category: category || (type === "income" ? "Renda" : "Outros"),
-          date: new Date().toISOString().split("T")[0],
-        });
+      const dto: CreateTransactionDTO = {
+        family_id: member.family_id,
+        member_id: member.id,
+        member_name: member.name,
+        type,
+        amount: amountNumber,
+        description,
+        category: category || (type === "income" ? "Renda" : "Outros"),
+        date: new Date().toISOString().split("T")[0],
+      };
 
-      if (insertError) throw insertError;
-
-      // Feedback de sucesso
+      await transactionService.create(dto);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Reset e fecha
-      setAmount("");
-      setDescription("");
-      setCategory("");
       onClose();
       onSuccess?.();
     } catch (err: any) {
@@ -133,28 +112,20 @@ export function QuickTransactionModal({
   const categories =
     type === "expense"
       ? DEFAULT_CATEGORIES.filter(
-          (c) => c.group !== "financeiro" || c.key === "dividas",
+          (c) => c.group !== "financeiro" || c.key === "dividas"
         )
       : DEFAULT_CATEGORIES.filter(
-          (c) => c.key === "renda" || c.key === "investimentos",
+          (c) => c.key === "renda" || c.key === "investimentos"
         );
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         className="flex-1"
         style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Overlay clickable */}
         <Pressable className="flex-1" onPress={onClose} />
-
-        {/* Modal Content */}
         <View
           className="rounded-t-3xl px-5 py-5 flex-1"
           style={{ backgroundColor: "#131315", maxHeight: height * 0.75 }}
@@ -163,79 +134,34 @@ export function QuickTransactionModal({
           <View className="flex-row items-center justify-between mb-5">
             <View className="flex-1 flex-row items-center gap-2">
               <Zap size={20} color="#FF6B1A" />
-              <Text className="text-white text-lg font-bold">
-                Lançamento Rápido
-              </Text>
+              <Text className="text-white text-lg font-bold">Lançamento Rápido</Text>
             </View>
-            <Pressable
-              onPress={onClose}
-              className="p-2"
-              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-            >
+            <Pressable onPress={onClose} className="p-2">
               <X size={20} color="#9B8B82" />
             </Pressable>
           </View>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 20 }}
-          >
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 20 }}>
             {/* Type Toggle */}
-            <View
-              className="flex-row rounded-2xl overflow-hidden mb-5"
-              style={{ backgroundColor: "#1F1B19" }}
-            >
-              <Pressable
-                onPress={() => {
-                  setType("expense");
-                  Haptics.selectionAsync();
-                }}
-                className="flex-1 py-2.5 items-center"
-                style={{
-                  backgroundColor:
-                    type === "expense" ? "#2A2420" : "transparent",
-                }}
-              >
-                <Text
-                  className="font-semibold text-sm"
-                  style={{
-                    color: type === "expense" ? "#F5F0EC" : "#6B5C52",
-                  }}
+            <View className="flex-row rounded-2xl overflow-hidden mb-5" style={{ backgroundColor: "#1F1B19" }}>
+              {(["expense", "income"] as const).map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => { setType(t); Haptics.selectionAsync(); }}
+                  className="flex-1 py-2.5 items-center"
+                  style={{ backgroundColor: type === t ? "#2A2420" : "transparent" }}
                 >
-                  Despesa
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setType("income");
-                  Haptics.selectionAsync();
-                }}
-                className="flex-1 py-2.5 items-center"
-                style={{
-                  backgroundColor:
-                    type === "income" ? "#2A2420" : "transparent",
-                }}
-              >
-                <Text
-                  className="font-semibold text-sm"
-                  style={{
-                    color: type === "income" ? "#F5F0EC" : "#6B5C52",
-                  }}
-                >
-                  Receita
-                </Text>
-              </Pressable>
+                  <Text className="font-semibold text-sm" style={{ color: type === t ? "#F5F0EC" : "#6B5C52" }}>
+                    {t === "expense" ? "Despesa" : "Receita"}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
 
-            {/* Amount Input */}
+            {/* Amount */}
             <View className="mb-5">
-              <Text className="text-xs font-semibold text-amber-600 mb-2 uppercase">
-                Valor
-              </Text>
-              <View
-                className="flex-row items-center rounded-2xl px-4 py-3"
-                style={{ backgroundColor: "#1F1B19" }}
-              >
+              <Text className="text-xs font-semibold text-amber-600 mb-2 uppercase">Valor</Text>
+              <View className="flex-row items-center rounded-2xl px-4 py-3" style={{ backgroundColor: "#1F1B19" }}>
                 <Text className="text-white text-lg font-semibold">R$ </Text>
                 <TextInput
                   value={amount}
@@ -250,11 +176,9 @@ export function QuickTransactionModal({
               </View>
             </View>
 
-            {/* Description Input */}
+            {/* Description */}
             <View className="mb-5">
-              <Text className="text-xs font-semibold text-amber-600 mb-2 uppercase">
-                Descrição
-              </Text>
+              <Text className="text-xs font-semibold text-amber-600 mb-2 uppercase">Descrição</Text>
               <TextInput
                 value={description}
                 onChangeText={setDescription}
@@ -278,82 +202,28 @@ export function QuickTransactionModal({
               ) : (
                 <>
                   <Mic size={16} color="#FF6B1A" />
-                  <Text className="text-amber-600 text-sm font-semibold">
-                    Falar (beta)
-                  </Text>
+                  <Text className="text-amber-600 text-sm font-semibold">Falar (beta)</Text>
                 </>
               )}
             </Pressable>
 
-            {/* Recent Categories */}
-            {recentCategories.length > 0 && (
-              <View className="mb-5">
-                <Text className="text-xs font-semibold text-amber-600 mb-2 uppercase">
-                  Categorias Recentes
-                </Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {recentCategories.map((cat) => (
-                    <Pressable
-                      key={cat.key}
-                      onPress={() => {
-                        setCategory(cat.key);
-                        Haptics.selectionAsync();
-                      }}
-                      className="px-3 py-2 rounded-full flex-row items-center gap-1.5"
-                      style={{
-                        backgroundColor:
-                          category === cat.key
-                            ? cat.color
-                            : "rgba(255,255,255,0.05)",
-                        borderWidth: category === cat.key ? 0 : 1,
-                        borderColor: "rgba(255,255,255,0.1)",
-                      }}
-                    >
-                      <Text>{cat.icon}</Text>
-                      <Text
-                        className="text-xs font-semibold"
-                        style={{
-                          color: category === cat.key ? "#FFF" : "#9B8B82",
-                        }}
-                      >
-                        {cat.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* All Categories (Grid) */}
+            {/* Categories */}
             <View className="mb-5">
-              <Text className="text-xs font-semibold text-amber-600 mb-2 uppercase">
-                {recentCategories.length > 0 ? "Todas" : "Categorias"}
-              </Text>
+              <Text className="text-xs font-semibold text-amber-600 mb-2 uppercase">Categorias</Text>
               <View className="flex-row flex-wrap gap-2">
                 {categories.map((cat) => (
                   <Pressable
                     key={cat.key}
-                    onPress={() => {
-                      setCategory(cat.key);
-                      Haptics.selectionAsync();
-                    }}
+                    onPress={() => { setCategory(cat.key); Haptics.selectionAsync(); }}
                     className="px-3 py-2 rounded-lg flex-row items-center gap-1.5"
                     style={{
-                      backgroundColor:
-                        category === cat.key
-                          ? cat.color
-                          : "rgba(255,255,255,0.03)",
-                      borderWidth: category === cat.key ? 0 : 1,
-                      borderColor: "rgba(255,255,255,0.08)",
+                      backgroundColor: category === cat.key ? cat.color : "rgba(255,255,255,0.03)",
+                      borderWidth: 1,
+                      borderColor: category === cat.key ? "transparent" : "rgba(255,255,255,0.08)",
                     }}
                   >
                     <Text>{cat.icon}</Text>
-                    <Text
-                      className="text-xs font-semibold"
-                      style={{
-                        color: category === cat.key ? "#FFF" : "#6B5C52",
-                      }}
-                    >
+                    <Text className="text-xs font-semibold" style={{ color: category === cat.key ? "#FFF" : "#6B5C52" }}>
                       {cat.label}
                     </Text>
                   </Pressable>
@@ -361,15 +231,9 @@ export function QuickTransactionModal({
               </View>
             </View>
 
-            {/* Error Message */}
             {error && (
-              <View
-                className="p-3 rounded-xl mb-4 flex-row items-center gap-2"
-                style={{ backgroundColor: "rgba(244, 67, 54, 0.1)" }}
-              >
-                <Text className="text-red-400 text-sm font-semibold flex-1">
-                  {error}
-                </Text>
+              <View className="p-3 rounded-xl mb-4" style={{ backgroundColor: "rgba(244, 67, 54, 0.1)" }}>
+                <Text className="text-red-400 text-sm font-semibold">{error}</Text>
               </View>
             )}
           </ScrollView>
@@ -379,22 +243,14 @@ export function QuickTransactionModal({
             onPress={handleSave}
             disabled={loading || !amount || !description}
             className="py-3 rounded-2xl flex-row items-center justify-center gap-2 mt-4"
-            style={{
-              backgroundColor:
-                loading || !amount || !description ? "#6B5C52" : "#FF6B1A",
-            }}
+            style={{ backgroundColor: loading || !amount || !description ? "#6B5C52" : "#FF6B1A" }}
           >
             {loading ? (
               <ActivityIndicator color="#131315" />
             ) : (
               <>
                 <Zap size={18} color="#131315" />
-                <Text
-                  className="text-base font-bold"
-                  style={{ color: "#131315" }}
-                >
-                  Salvar Transação
-                </Text>
+                <Text className="text-base font-bold" style={{ color: "#131315" }}>Salvar Transação</Text>
               </>
             )}
           </Pressable>

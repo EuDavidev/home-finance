@@ -160,7 +160,16 @@ export function detectCategory(description: string): string {
   };
 
   for (const [category, keywords] of Object.entries(categoryRules)) {
-    if (keywords.some((keyword) => desc.includes(keyword))) {
+    if (
+      keywords.some((keyword) => {
+        if (keyword.length <= 3) {
+          const escaped = keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+          const regex = new RegExp(`(?:^|[^a-zA-Z0-9áéíóúâêôãõç])${escaped}(?:$|[^a-zA-Z0-9áéíóúâêôãõç])`);
+          return regex.test(desc);
+        }
+        return desc.includes(keyword);
+      })
+    ) {
       return categoryLabels[category] || category;
     }
   }
